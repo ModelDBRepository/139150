@@ -1,0 +1,491 @@
+//************************************************************
+//Imperfect space clamp permits electrotonic interactions 	//
+//between inhibitory and excitatory synaptic conductances,	//
+//distorting voltage clamp recordings						//
+//															//
+//Alon Poleg-Polsky and Jeffrey S. Diamond					//
+//															//
+//															//
+//March 2011												//
+//polegpolsky@mail.nih.gov									//
+//															//
+//this simulation examines interactions between excitatory 	//
+//and inhibitory inputs over a simple/adjustable neural		//
+//geometry. The simulation first creates a neurons, then	//
+//places inhibitory and excitatory synapses that are 		//
+//randomly distributed over the dednritic field.			//
+//the soma is voltage clamped and the recorded current		//
+//is examined for single (exc/inhib) activation and for the	//
+//combined one. Voltage clamp error is defined as the		//
+//difference between the expected arithmetic summation		//
+//of the synaptic currents to the actual one produced		//
+//during the combined activation							//
+//**********************************************************//
+
+
+load_file("nrngui.hoc")
+
+
+//---CONSTANTS---//
+numsyn=300			// TOTAL NUMBER OF SYNAPSES
+numfirstdend=7		// NUMBER OF FIRST ORDER DENDRITEs
+numgen=4			// NUMBER OF BIFURCATIONS
+numdend=0			// TOTAL NUMBER OF DENDRITES (CALCULATED)
+for i=0,numgen-1{
+	numdend=(2^i)*numfirstdend+numdend
+}
+anglevariance=0		//THE RANDOM VARIABILITY IN THE ANGLES AT BIFURCATIONS (NOT USED)
+rconnectivity=1		//THE % FOR CONNECTION IN EACH NODE (0=NO CONNECTION, 1=100% CONNECTIVITY)
+rnoconnectivity=1	//THE % FOR BEING END TERMINAL (100%)
+lengthvariance=0	//THE RANDOM VARIABILITY OF DEND LENGTH (0) 
+rdiamvar=0			//VARIANCE OF DIAM (0)
+somasize=20			//THE SIZE OF THE SOMA (MICRONS)
+dendlengthbif=1		//HOW THE LENGTH IS DECREASED WITH EACH BIFURCATION
+anglebetween=PI/6/2 //THE ANGLE BETWEEN BRANCHES
+stalklength=.1		//THE LENGTH OF THE STALK (Z DENDRITE) WHERE APPLICABLE
+syndens=5			//DENSITY OF SYNAPTIC CONTACTS (DISTANCE BETWEEN SYNAPSES, MICRONS)
+startdiam=.5		//1
+totallength=200		//THE  RADIUS OF THE DENDRITIC TREE
+dendlength=50		//THE LENGTH OF FIRST GENERATION DENDRITES (MICRONS)
+dendlength=totallength/numgen		//THE LENGTH OF FIRST GENERATION DENDRITES (MICRONS)
+OClampvalue=-60		//HOLDING POTENTIAL OF THE VOLTAGE CLAMP
+gpas=1/100000		//PASSIVE CURRENT
+epas=-60
+simtime=400			//RUNNING TIME
+inhibtau=20			//TAU OF THE INHIBITORY SYNAPSE
+synampa=.5			//AMPAR CONDUCTANCE
+synnmda=.2			//NMDAR CONDUCTANCE
+inhibamp=.25		//INHIBITORY CONDUTANCE
+show_shape_plot=0
+//END CONSTANT
+
+//---GENERATE THE CELL---//
+
+create soma,stalk		//SOMA AND THE Z DEND
+create dend[numdend]
+for i=0,numdend-1{
+	dend[i].nseg=999
+}
+objref dends
+dends=new SectionList()
+
+access soma
+pt3dadd(0,0,0,somasize)
+pt3dadd(0,0,-somasize,somasize)
+
+access stalk
+pt3dadd(0,0,0,1)
+pt3dadd(0,0,stalklength,1)
+connect stalk(0), soma(0)
+//PREPARES SOME OBJECTS AND VARIABLES; MOST ARE UNUSED IN CURRENT VERSION
+objref rchild,rangle,rlength,rdiam
+rchild=new Random(0)
+rangle=new Random(0)
+rlength=new Random(0)
+rdiam=new Random(0)
+rchild.uniform(0,1)
+rangle.normal(0,anglevariance)					//BIF ANGLE VARIANCE
+rdiam.normal(-rdiamvar*2,rdiamvar)				//VARIANCE OF DIAMETER
+rlength.normal(dendlengthbif,lengthvariance)	//LENGTH VARIANCE
+count=0
+countsyn=-1
+totalL=0
+double dirchild[numdend]
+for i=0,numdend-1{dirchild[i]=0}
+
+proc buildcell(){//BUILDS CHILD DENDRITES OF FIRST GENERATION BRANCH
+	//1PARENT DEND;2DIRECTION;LENGTH
+
+//FIND PARENT
+	parentdend=-1
+	found=0
+	while ((found==0)&&(parentdend<numdend-2)){
+
+		parentdend=parentdend+1	
+		if (rchild.repick()>rnoconnectivity){dirchild[parentdend]=2}
+		if ((dirchild[parentdend]<2)&&(rchild.repick()<rconnectivity)){found=1}
+		if (dend[parentdend].nseg==999){found=0}
+		
+	}
+	if (parentdend==numdend-2){return}
+	count=$1
+	connect dend[count](0),dend[parentdend](1)
+	access dend[parentdend]
+	x0=x3d(0)
+	y0=y3d(0)			
+	x1=x3d(1)
+	y1=y3d(1)	
+	z1=z3d(1)
+	d1=diam3d(1)
+	if (d1<0.5){d1=0.5
+	}else{
+		if (d1>1){d1=1}
+	}
+	length=dend[parentdend].L	
+	angle=0
+	if (!(y0==y1)){		//CALCULATES THE ANGLE OF THE PREV. DEND
+		angle=atan((x1-x0)/(y1-y0))
+	}else{
+		if (x1>x0){angle=PI/2
+		}else{angle=-PI/2}
+	}
+
+	if (y0>y1){angle=angle+PI}
+	angle=angle+rangle.repick()	
+	if (dirchild[parentdend]==0){//NO CHILDREN
+		if (rchild.repick()>0.5){
+			angle=angle+anglebetween
+			dirchild[parentdend]=1
+		}else{
+			angle=angle-anglebetween	
+			dirchild[parentdend]=-1
+ 		}
+	}else{//ONE CHILD - OTHER DIRECTION
+		angle=angle-anglebetween*dirchild[parentdend]
+		dirchild[parentdend]=2
+	}
+	access dend[count]
+	dends.append()
+	pt3dadd(x1,y1,z1,d1)
+	length=rlength.repick()*length
+	if (length<5){length=5}
+	pt3dadd(x1+length*sin(angle),y1+length*cos(angle),z1+rdiam.repick()*20,d1)
+	nseg=9
+	totalL=totalL+dend[count].L
+}
+
+for i=0,numfirstdend-1{//CONNECT FIRST GENERATION DENDRITES
+	connect dend[i](0),stalk(1)
+	access dend[i]
+	parentdend=-1
+	pt3dadd(0,0,stalklength,startdiam)
+	pt3dadd((dendlength)*sin(2*PI/numfirstdend*i),(dendlength)*cos(2*PI/numfirstdend*i),stalklength,startdiam)
+	dends.append()
+	totalL=totalL+dend[count].L
+	nseg=9
+}	
+for i=numfirstdend,numdend-1{
+	buildcell(i)
+}
+for count=0,numdend-1{//SOME CLEANING
+	access dend[count] 
+	if (nseg==999){
+		delete_section()
+	}
+}
+//END GENERATE CELL
+
+//START DISTRIBUTION OF SYNAPSES
+objref synS[numsyn],synI[numsyn]
+objref r,rloc,rtime,r2
+r=new Random()
+r2=new Random()
+rloc=new Random()
+rtime=new Random()
+rloc.uniform(5,95)					//LOCATION ON THE BRANCH (%)
+rtime.uniform(30,200)				//LOCATION ON THE DENDRITIC FIELD (MICRONS)
+access soma
+distance()
+maxdist=0							//THE SIZE OF THE CELL
+forsec dends{
+	if(distance(1)>maxdist){maxdist=distance(1)}
+}
+r.uniform(20,maxdist-1)				//RADIAL LOCATION
+r2.uniform(0,numdend-1)				//NUMBER OF DENDS
+rloc.ACG()
+r.ACG()
+r2.ACG()
+rtime.ACG()
+for countsyn=0,numsyn-1{			//PUTS THE SYNAPSES
+	denddist=int(r.repick())		//DISTANCE FROM SOMA
+	access dend[int(r2.repick())]
+	while ((distance(0)>denddist)||(distance(1)<denddist)){
+		access dend[int(r2.repick())]
+	}
+	location=rloc.repick()/100
+	delay=rtime.repick()
+	tspike=rtime.repick()
+		//INHIBITORY SYNAPSES
+	synI[countsyn]=new linsyn(location)
+	synI[countsyn].del=delay
+	synI[countsyn].Nspike=3
+	synI[countsyn].Tspike=tspike		
+	synI[countsyn].e=-60
+	denddist=int(r.repick())
+	access dend[int(r2.repick())]
+	while ((distance(0)>denddist)||(distance(1)<denddist)){
+		access dend[int(r2.repick())]
+	}
+		//EXCITATORY SYNAPSES
+	location=rloc.repick()/100
+	delay=rtime.repick()
+	tspike=rtime.repick()
+	synS[countsyn]=new glutamate(location)
+	synS[countsyn].gnmdamax=synnmda
+	synS[countsyn].gampamax=synampa
+	synS[countsyn].Nspike=3
+	synS[countsyn].Tspike=tspike
+	synS[countsyn].del=delay
+}
+
+access soma
+
+proc setactive(){//ADDS VOLTAGE GATED AND PASSIVE CHANNELS
+	forall{
+		insert pas
+		g_pas=gpas
+		e_pas=epas
+		//UNCOMMENT FOR HH CONDUCTANCE
+//		insert hh3
+//		gnabar_hh3=0.1
+//		gkbar_hh3=0
+//		gkbar2_hh3=0
+//		gl_hh3=0
+	}
+}
+setactive()
+
+proc initsynapses(){//NOT USED
+	for count=0,countsyn-1{
+		synS[count].del=10000
+		synI[count].del=10000
+	}
+}//init synapses
+
+proc setactivation(){//USER UPDATED THE PARAMETERS
+	for count=0,countsyn-1{
+			synS[count].gampamax=synampa
+			synS[count].gnmdamax=synnmda
+			synI[count].tau_syn=inhibtau
+			synI[count].gmax=inhibamp
+	}
+
+}//setactivaTion
+
+proc makepanel(){//USED GUI
+	xpanel("Control")
+		xbutton("Run","visrun()")
+		xbutton("BatchRun","batchrun()")
+		xlabel("Excitation")
+		xvalue("AMPA","synampa",1,"setactivation()")
+		xvalue("NMDA","synnmda",1,"setactivation()")
+		xlabel("Inhibition")
+		xvalue("Tau","inhibtau",1,"setactivation()")
+		xvalue("Amp","inhibamp",1,"setactivation()")
+		xvalue("Hol","OClampvalue",1,"synV.vc=OClampvalue")
+		xbutton("Calc","calcamp()")
+		xstatebutton("Show synapses",&show_shape_plot,"")
+	xpanel(300,150)
+}//makepanel
+
+//MORE VARIABLES AND OBJECTS
+objref shape,somaplot,gplot,iplot,igraph
+objref fsave,synV
+access soma
+synV=new OClamp(0.5)
+synV.on=0
+synV.off=1000
+synV.vc=OClampvalue
+synV.switched_on=1 
+//PLOTS
+shape=new Shape(0)
+shape.view(-250, -250, 500, 500, 00, 500, 200.48, 200.32)
+somaplot=new Graph(0)
+somaplot.view(0, -80, 300, 400, 550, 0, 300.48, 200.32)  
+shape.show(0)
+somaplot.addvar("soma.v(0.5)")
+somaplot.addvar("dend[0].v(0.5)")
+
+proc make_shape_plot(){//DRAWS THE SYNAPSES ON THE CELL, CAN BE USED TO MAKE A MOVIE
+	shape.point_mark_remove()
+	for i=0,countsyn-1{
+		if ( ((synI[i].del<=$1)&&(synI[i].del+synI[i].tau_syn>=$1)) ||($1==-1)){
+			shape.point_mark(synI[i], 3, 4, 9)	
+		}
+	}
+	for i=0,countsyn-1{
+		if ( ((synS[i].del<=$1)&&(synS[i].del+20>=$1)) ||($1==-1)){
+			shape.point_mark(synS[i], 2, 4, 5)	
+		}
+	}
+	shape.flush()
+	access soma
+}//END SHAPE
+
+gplot=new Graph(0)
+iplot=new Graph(0)
+igraph=new Graph(0)
+gplot.view(0, 0, 400, 100, 800, 0, 200, 200)  
+iplot.view(0, -1, 400, 1, 800, 300, 200, 200)  
+igraph.view(0, -1, 400, 1, 1000, 300, 200, 200)  
+//CONDUCTANCE PLOTS
+ge=0
+gi=0
+ie=0
+ii=0
+gplot.addvar("ge",1,1)
+gplot.addvar("gi",2,1)
+iplot.addvar("ie",1,1)
+iplot.addvar("ii",2,1)
+//VOLTAGE CLAMP CURRENT
+igraph.addvar("OClamp[0].i",1,1)
+objref gev,giv
+gev=new Vector()
+giv=new Vector()
+
+proc make_gi_plot(){//SHOWS THE EXCITATORY AND INHIBITORY CONDUCTANCES AND CURRENTS
+	ge=0
+	for i=0,countsyn-1{
+		ge=ge+synS[i].gampa+synS[i].gnmda
+	}
+	gev.append(ge)
+	gi=0
+	for i=0,countsyn-1{
+		gi=gi+synI[i].gsyn
+	}
+	giv.append(gi)
+
+	ie=0
+	for i=0,countsyn-1{
+		ie=ie+synS[i].iampa+synS[i].inmda
+	}
+
+	ii=0
+	for i=0,countsyn-1{
+		ii=ii+synI[i].i
+	}
+	gplot.plot(t)	
+	gplot.flush()
+	iplot.plot(t)	
+	iplot.flush()
+
+	igraph.plot(t)	
+	igraph.flush()
+}//make gi plot
+
+graphList[0].append(somaplot)
+graphList[0].append(gplot)
+graphList[0].append(iplot)
+graphList[0].append(igraph)
+load_file("ds.ses")
+
+objref yvec
+yvec=new Vector()
+yvec.record(&OClamp[0].i)
+
+proc calcamp(){//CALCULATES THE MEAN CURRENT
+	startpoint=100*20
+	endpoint=500*20
+	if (yvec.size()<endpoint){endpoint=yvec.size()}
+	i=startpoint
+	avg=0
+	sd=0
+	while (i<endpoint){
+		avg=avg+yvec.x[i]
+		i=i+1
+	}//while
+	if (i==startpoint){
+		print "too short"
+	}else{
+		avg=avg/(i-startpoint)-yvec.x[28*20]
+//----------------SD-------------------//
+		i=startpoint
+		while (i<endpoint){
+			sd=(avg-yvec.x[i])^2+sd
+			i=i+1
+		}//while
+		sd=sd/(i-startpoint-1)
+		sd=sqrt(sd)
+		print avg
+	}
+}
+
+objref syntest
+
+proc batchrun(){//RUNS MULTIPLE TIMES
+	for countrun=-6,4{//NUMBER OF RUNS
+		//UNCOMMENT THE RELEVANT VARIABLE TO CHANGE BETWEEN RUNS
+		synV.vc=countrun*10
+//		forall gnabar_hh3=countrun/100//		forsec dends {L=countrun*10}
+//		stalk.diam=1
+//		stalk.L=2^countrun-.9//		synnmda=2*countrun/100
+//		synampa=5*countrun/100
+//		synampa=0.5*(10-countrun)/10//		forsec dends {diam=countrun/5}
+//		soma.nseg=9
+//		soma.diam=countrun*3
+//		inhibtau=1.6^countrun
+//		inhibamp=countrun/10
+//		setactivation()
+//		xvalue("ntar","ntar",1,"setactivation()")
+		for i=0,countsyn-1{
+//			synI[i].e=-60-countrun
+		}
+		visrun()
+	}
+}
+
+proc batchrun1(){//OLD, NOT USED
+
+	for denddistcount=0,10{
+		access soma
+		distance()
+		denddist=denddistcount*10
+		if (denddist==0){
+			access soma 
+			loc=0.5
+		}else{
+			access dend[int(r2.repick())]
+			while ((distance(0)>denddist)||(distance(1)<denddist)){
+				access dend[int(r2.repick())]
+			}
+			loc=(denddist-distance(0))/(distance(1)-distance(0))
+			if (loc<0.05){loc=0.05}
+			if (loc>0.95){loc=0.95}
+		}
+		syntest=new glutamate(loc)
+		syntest.gnmdamax=0.25
+		syntest.gampamax=0.5
+		syntest.Nspike=1
+		syntest.del=20
+		yvec.record(&syntest.local_v)
+		visrun()
+	}
+}
+
+proc visrun(){	//RUNS OVER THE RAGE OF THE VOLTAGES AND SAVES THE DATA		gev=new Vector()
+	giv=new Vector()
+	strdef stex
+	count2=0
+	vol=0
+	finitialize(e_pas)
+	t=0
+	stoprun=0
+	igraph.begin()
+	gplot.begin()
+	somaplot.begin()
+	while ((t<tstop)&&(stoprun==0)){
+		fadvance()	
+ 		if (t%1<0.1){
+			setactivation()
+			if (show_shape_plot==1){make_shape_plot(t)}
+			make_gi_plot()
+		}
+ 		if (t%1<0.1){
+			somaplot.plot(t)	
+			somaplot.flush()
+			gplot.plot(t)	
+			gplot.flush()
+			igraph.plot(t)	
+			igraph.flush()
+			doEvents()
+		}
+	}//while t
+	calcamp()
+}//visrun
+
+makepanel()
+setactivation()
+access soma
+
+// 20110511: as per note in original readme ModelDB administrator update:
+forall Ra=100
