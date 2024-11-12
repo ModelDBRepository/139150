@@ -192,10 +192,10 @@ forsec dends{
 }
 r.uniform(20,maxdist-1)				//RADIAL LOCATION
 r2.uniform(0,numdend-1)				//NUMBER OF DENDS
-rloc.ACG()
-r.ACG()
-r2.ACG()
-rtime.ACG()
+rloc.Random123()
+r.Random123()
+r2.Random123()
+rtime.Random123()
 for countsyn=0,numsyn-1{			//PUTS THE SYNAPSES
 	denddist=int(r.repick())		//DISTANCE FROM SOMA
 	access dend[int(r2.repick())]
