@@ -80,9 +80,13 @@ connect stalk(0), soma(0)
 //PREPARES SOME OBJECTS AND VARIABLES; MOST ARE UNUSED IN CURRENT VERSION
 objref rchild,rangle,rlength,rdiam
 rchild=new Random(0)
+rchild.Random123()
 rangle=new Random(0)
+rangle.Random123()
 rlength=new Random(0)
+rlength.Random123()
 rdiam=new Random(0)
+rdiam.Random123()
 rchild.uniform(0,1)
 rangle.normal(0,anglevariance)					//BIF ANGLE VARIANCE
 rdiam.normal(-rdiamvar*2,rdiamvar)				//VARIANCE OF DIAMETER
@@ -178,10 +182,14 @@ for count=0,numdend-1{//SOME CLEANING
 //START DISTRIBUTION OF SYNAPSES
 objref synS[numsyn],synI[numsyn]
 objref r,rloc,rtime,r2
-r=new Random()
-r2=new Random()
-rloc=new Random()
-rtime=new Random()
+r=new Random(0)
+r.Random123()
+r2=new Random(0)
+r2.Random123()
+rloc=new Random(0)
+rloc.Random123()
+rtime=new Random(0)
+rtime.Random123()
 rloc.uniform(5,95)					//LOCATION ON THE BRANCH (%)
 rtime.uniform(30,200)				//LOCATION ON THE DENDRITIC FIELD (MICRONS)
 access soma
@@ -192,10 +200,6 @@ forsec dends{
 }
 r.uniform(20,maxdist-1)				//RADIAL LOCATION
 r2.uniform(0,numdend-1)				//NUMBER OF DENDS
-rloc.ACG()
-r.ACG()
-r2.ACG()
-rtime.ACG()
 for countsyn=0,numsyn-1{			//PUTS THE SYNAPSES
 	denddist=int(r.repick())		//DISTANCE FROM SOMA
 	access dend[int(r2.repick())]
