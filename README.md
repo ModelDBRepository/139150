@@ -41,9 +41,8 @@ significant influence on the recording.
 
 ![Figure1](./example1.jpg)
 
+## Changelog
 20110511 ModelDB Administrator: globalRa (Ra=100) update was added to  
 end of vccell.hoc
 
----
-
-2025-06-20: Converted README to Markdown.
+20250620 Converted README to Markdown.
